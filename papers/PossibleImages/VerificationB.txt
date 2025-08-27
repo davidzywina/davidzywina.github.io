@@ -1,0 +1,220 @@
+// We first need the groups and rational functions of the paper to be loaded.
+load "Equations.txt";
+
+function NonapplicableSubgroups(ell,G)
+    // Input: G an applicable subgroup of GL(2,F_ell)
+    // Output: the set of proper subgroups H of G such that G = \pm H
+    HH:=[H`subgroup: H in Subgroups(G:OrderEqual:=#G div 2)];
+    return {H : H in HH | GL(2,ell)![-1,0,0,-1] notin H};
+end function;
+
+
+//  The following verifies the claimed subgroups H of relevant applicable G such that \pm H = G.
+
+// ell=3
+HH:=NonapplicableSubgroups(3,G3[1]);
+assert H3[1][1] in HH and #HH eq 2 and &and{IsConjugate(GL(2,3),H1,H2): H1,H2 in HH};
+for i in [2..#J3] do   
+    assert NonapplicableSubgroups(3,G3[i]) eq {H: H in H3[i]};  
+end for;
+
+// ell=5
+for i in [1..#J5] do   
+    assert NonapplicableSubgroups(5,G5[i]) eq {H: H in H5[i]};  
+end for;
+
+// ell=7
+HH:=NonapplicableSubgroups(7,G7[1]);
+assert H7[1][1] in HH and #HH eq 2 and &and{IsConjugate(GL(2,7),H1,H2): H1,H2 in HH};
+for i in [2..#J7] do   
+    assert NonapplicableSubgroups(7,G7[i]) eq {H: H in H7[i]};  
+end for;
+
+// ell=11
+for i in [1..#J11] do   
+    assert NonapplicableSubgroups(11,G11[i]) eq {H: H in H11[i]};  
+end for;
+
+//ell=13
+for i in [1..#J13] do   
+    assert NonapplicableSubgroups(13,G13[i]) eq {H: H in H13[i]};  
+end for;
+
+// *********************************************************************************
+
+function  DD(N,h,E)
+        // Input: an elliptic curve E/Q whose j-invariant is neither 0 or 1728.  
+	// Output: the first set D_r for E/Q that has cardinality at most h (with the implicit N)
+	// The output is D_E when h=#D_E.    It is assumed that N is odd.
+        B:={p: p in BadPrimes(E) cat PrimeDivisors(N)};
+        D:={&*S: S in Subsets(B join {-1})};
+        p:=1;
+        while #D gt h do
+            repeat p:=p+N; until IsPrime(p) and p notin B;
+            a:=TraceOfFrobenius(E,p);
+            D:={d: d in D | (a mod N) ne (-2*KroneckerSymbol(d,p) mod N)};
+	end while;	
+        return D;	
+end function;
+
+
+function ModelAndTwists(N,J)
+    // With notation as in section 6, returns the pair [a,b] and the set M.
+
+    J:=FunctionField(Rationals())!J;
+    a:=-3*J/(J-1728); b:=-2*J/(J-1728);       
+    irr:=[f[1]: f in Factorization(Denominator(a)*Denominator(b))];
+    for f in irr do
+      while Valuation(a,f) lt 0 or Valuation(b,f) lt 0 do 
+        a:=a*f^2;  b:=b*f^3; 
+      end while;
+    end for;
+        
+    // a and b are now polynomials in Q[t]
+    Pol<t>:=PolynomialRing(Rationals());
+    a:=Pol!a; b:=Pol!b;
+    f:=LCM({Denominator(c): c in Coefficients(a) cat Coefficients(b)});	
+    a:=a*f^2;  b:=b*f^3;
+    
+    // a and b are now polynomials in Z[t]
+    Pol<t>:=PolynomialRing(Integers());
+    a:=Pol!a; b:=Pol!b;  
+    irr:=[f[1]: f in Factorization(Denominator(a)*Denominator(b))];
+    for f in irr do
+    	while Valuation(a,f) ge 2 and Valuation(b,f) ge 3 do
+		a:=a div f^2;  b:=b div f^3;
+	end while;
+    end for;
+    Delta:=16*(4*a^3+27*b^2); 
+    irr:={f[1]: f in Factorization(Delta*N)} join {-1};
+    M:={&*S: S in Subsets(irr)};
+
+    return a,b, M;
+end function;        
+
+
+function EE(ell,J,Jlow)
+    //  With notation as in section 6, with J=Ji and Jlow:=[J_j: j<i], outputs 
+    //  the Weierstrass equation of E_{i,t}/Q(t) from the relevant section of the intro    
+    //  with ell an odd prime.
+    a,b,F := ModelAndTwists(ell,J);
+    u:=0;
+    while #F gt 2 do
+        done:=false; //continue until good u found.
+        repeat
+            u:=u+1;
+            if Evaluate(Denominator(J),u) ne 0 then
+                j:=Evaluate(J,u);
+                if j notin {0,1728} and {#Roots(Numerator(Ji-j)):Ji in Jlow} subset {0} then
+                    done:= true;
+                end if;
+            end if;
+        until done;
+
+        E0:=EllipticCurve([Evaluate(a,u),Evaluate(b,u)]);
+        D:=DD(ell,2,E0);
+        F:={f : f in F | true in {IsSquare(Evaluate(f,u)*d): d in D}};
+    end while;
+    
+    Pol<t>:=PolynomialRing(Integers());
+    f1:=[f: f in F | (-1)^((ell-1) div 2)*ell*f in F][1]; 
+    a:=Pol!(a*f1^2);  b:=Pol!(b*f1^3);
+    irr:={f[1]: f in Factorization(16*(4*a^3+27*b^2))}; 
+    for f in irr do
+    	while Valuation(a,f) ge 4 and Valuation(b,f) ge 6 do
+		a:=a div f^4;  b:=b div f^6;
+	end while;
+    end for;
+    K<t>:=FunctionField(Rationals());
+    return [K!a,K!b];
+end function;
+
+
+// The following checks that, in relevant situations, the Weierstrass E_{i,t}/Q(t) from the intro 
+// has the property:  if \pm rho_{E,ell}(Gal_Q) is conjugate to G_i, then rho_{E,ell}(Gal_Q) is not 
+// conjugate to G_i if and only if E is isomorphic to E_{i,u} or its twist by (-1/ell)*ell (where 
+// J_i(u)=j_E.
+
+// ell=3
+for i in [1..#J3] do
+    if #H3[i] ne 0 then
+        assert EE(3,J3[i],[J3[j]: j in [1..(i-1)]]) eq W3[i];
+    end if;
+end for;
+
+// ell=5
+for i in [1..#J5] do
+    if #H5[i] ne 0 then
+        assert EE(5,J5[i],[J5[j]: j in [1..(i-1)]]) eq W5[i];
+    end if;
+end for;
+
+// ell=7
+E:=EllipticCurve([Rationals()!a: a in W7[1]]);
+assert DD(7,2,E) eq {1,-7};
+
+for i in [2..#J7] do
+    if #H7[i] ne 0 then
+        assert EE(7,J7[i],[J7[j]: j in [1..(i-1)]]) eq W7[i];
+    end if;
+end for;
+
+// ell=11
+for i in [1..2] do
+    E:=EllipticCurve([Rationals()!a: a in W11[i]]);
+    assert DD(11,2,E) eq {1,-11};
+end for;
+
+// ell=13
+for i in [1..#J13] do
+    if #H13[i] ne 0 then
+        assert EE(13,J13[i],[J13[j]: j in [1..(i-1)]]) eq W13[i];
+    end if;
+end for;
+
+
+// *********************************************************************************
+// The follow checks the claimed facts from 6.2 concerning the pairs:
+//    [ell,i] in { [5,1], [5,5], [5,6], [7,3], [7,4], [13,4], 13,5] }
+function DistinguishedByTraceDet(ell,i,u,p,a, J,W,H)
+    E:=EllipticCurve([Evaluate(W[i][1],u), Evaluate(W[i][2],u)]); j:=jInvariant(E);
+    if j in {0,1728} or {#Roots(Numerator(J[k]-j)):k in [1..i-1]} notsubset {0} then
+        return false;
+    end if;
+    if p in BadPrimes(E) cat [ell] or a ne TraceOfFrobenius(E,p) then "="; return false; end if;
+    
+    t:=[GF(ell)!a,GF(ell)!p];
+    if t notin {[Trace(A),Determinant(A)]: A in H[i][2]} then return true; end if;
+    return false;
+end function;
+
+assert DistinguishedByTraceDet(5,1,1,2,-2, J5,W5,H5);
+assert DistinguishedByTraceDet(5,5,2,3,-1, J5,W5,H5);
+assert DistinguishedByTraceDet(5,6,1,2,-2, J5,W5,H5);
+assert DistinguishedByTraceDet(7,3,2,3,-3, J7,W7,H7);
+assert DistinguishedByTraceDet(7,4,2,3,-3, J7,W7,H7);
+assert DistinguishedByTraceDet(13,4,1,2,2, J13,W13,H13);
+assert DistinguishedByTraceDet(13,5,1,2,2, J13,W13,H13);
+
+// *********************************************************************************
+// The follow checks the claimed facts from 6.2 concerning the pairs:
+//    [ell,i] in { [3,3], [7,5], [7,7] }
+
+K<u>:=FunctionField(Rationals());
+E:=EllipticCurve([K!W3[3][1],K!W3[3][2]]);
+P:=E![3*(u+1)^2, 4*u*(u+1)^2];
+assert 3*P eq E!0;
+
+R<x>:=PolynomialRing(Rationals());
+K<w>:=NumberField(x^3-441*x^2-83349*x+22754277);
+E:=EllipticCurve([K!(-2835*(-7)^2),K!(-71442*(-7)^3)]);
+P:=E![w, 21*w -1323];
+assert Order(P) eq 7;
+
+R<x>:=PolynomialRing(Rationals());
+K<w>:=NumberField(x^3 - 1750329*x^2 + 1015924207851*x - 195667237639563291);
+E:=EllipticCurve([K!(-17870609043*(-7)^2),K!(-919511455160466*(-7)^3)]);
+P:=E![w, 1323*w-714884373];
+assert Order(P) eq 7;
+
+print "Done.";
